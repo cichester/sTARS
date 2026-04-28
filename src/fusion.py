@@ -33,57 +33,56 @@ def generate_ranking(user_profiles: dict, item_profiles: dict, item_trust_factor
     """
     Per ogni utente, genera la top K di item raccomandati.
     Applica la Late Fusion: Score = Cosine Similarity * Item_Trust_Factor se use_trust è True.
-    A causa delle performance in Python raw per grandi N*M, matricializziamo.
+    Calcolo in batch per evitare Out of Memory (OOM) su grandi dataset.
     """
     logger.info(f"Generazione Ranking Top-{top_k} (Trust-Aware: {use_trust})")
     
     users = list(user_profiles.keys())
     items = list(item_profiles.keys())
     
-    # Matrici
-    X_users = np.array([user_profiles[u] for u in users])
     X_items = np.array([item_profiles[i] for i in items])
     
-    # Calcolo similarity semantica pura (Stream A)
-    # Ritorna shape (len(users), len(items))
-    logger.info("Calcolando Cosine Similarity Matrix...")
-    sim_matrix = cosine_similarity(X_users, X_items)
-    
-    # Per non penalizzare la similarità, normalizziamo la similarita in [0, 1] per combinazione pulita
-    # Sebbene cos sim sia tra -1 e 1 (di solito 0-1 per text dense emb), portarla su base non negativa è safest
-    # Facciamo relu per eliminare i negativi
-    sim_matrix = np.maximum(sim_matrix, 0)
-    
-    # Moltiplicazione Late Fusion
     if use_trust:
-        logger.info("Applicazione Late Fusion con Trust-Scorer (Stream B)...")
-        # Array 1D di trust factors associati agli items nello stesso ordine
         trust_array = np.array([item_trust_factors.get(i, 1.0) for i in items])
-        # Broadcasting multiplier to columns (items)
-        final_scores = sim_matrix * trust_array
-    else:
-        final_scores = sim_matrix
-        
-    logger.info("Ranking e sorting...")
-    recommendations = {}
     
-    # Utilizzare argpartition è molto più rapido di argsort per grandi matrici
-    for row_idx, user in enumerate(users):
-        user_scores = final_scores[row_idx]
+    recommendations = {}
+    batch_size = 1000
+    num_users = len(users)
+    
+    logger.info("Calcolando Cosine Similarity e Ranking in batch...")
+    
+    for start_idx in range(0, num_users, batch_size):
+        end_idx = min(start_idx + batch_size, num_users)
+        batch_users = users[start_idx:end_idx]
+        X_users_batch = np.array([user_profiles[u] for u in batch_users])
         
-        # Peschiamo i top K index
-        if len(user_scores) <= top_k:
-            top_indices = np.argsort(-user_scores)
+        # Calcolo similarity per il batch corrente
+        sim_matrix = cosine_similarity(X_users_batch, X_items)
+        sim_matrix = np.maximum(sim_matrix, 0)
+        
+        # Moltiplicazione Late Fusion
+        if use_trust:
+            final_scores = sim_matrix * trust_array
         else:
-            # Trova indici dei migliori k (non ordinati)
-            top_indices = np.argpartition(-user_scores, top_k)[:top_k]
-            # Li ordiniamo tra loro
-            top_scores = user_scores[top_indices]
-            sorted_k = np.argsort(-top_scores)
-            top_indices = top_indices[sorted_k]
+            final_scores = sim_matrix
             
-        recommendations[user] = [items[idx] for idx in top_indices]
-        
+        for row_idx, user in enumerate(batch_users):
+            user_scores = final_scores[row_idx]
+            
+            if len(user_scores) <= top_k:
+                top_indices = np.argsort(-user_scores)
+            else:
+                top_indices = np.argpartition(-user_scores, top_k)[:top_k]
+                top_scores = user_scores[top_indices]
+                sorted_k = np.argsort(-top_scores)
+                top_indices = top_indices[sorted_k]
+                
+            recommendations[user] = [items[idx] for idx in top_indices]
+            
+        if (start_idx // batch_size) % 10 == 0 and start_idx > 0:
+            logger.info(f"  Elaborati {start_idx}/{num_users} utenti...")
+            
+    logger.info(f"  Elaborati {num_users}/{num_users} utenti.")
     return recommendations
 
 def run_fusion_pipeline():
