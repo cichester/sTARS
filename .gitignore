@@ -1,0 +1,8 @@
+venv/
+data/
+dataset/
+__pycache__/
+.pytest_cache/
+*.log
+*.parquet
+*.jsonl

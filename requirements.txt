@@ -1,0 +1,12 @@
+polars>=1.0
+pandas>=2.2
+pyarrow>=15.0
+torch>=2.3 --index-url https://download.pytorch.org/whl/cu121
+transformers>=4.45
+sentence-transformers>=3.0
+peft>=0.13
+bitsandbytes>=0.44
+scikit-learn>=1.5
+pytest>=8.0
+tqdm
+beautifulsoup4
