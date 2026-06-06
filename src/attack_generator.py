@@ -151,6 +151,11 @@ def generate_genai_attack(df: pl.DataFrame, target_item: str, num_bots: int = 50
     logger.info(f"Generazione dei testi GenAI per l'item target {target_item}...")
     target_reviews = client.generate_reviews(target_item, num_bots, "positive")
     
+    # 2. Generazione del pool di recensioni generiche per i filler per evitare migliaia di API call lente
+    logger.info("Generazione del pool di recensioni generiche per i filler...")
+    filler_positives = client.generate_reviews("generic_filler", 50, "positive")
+    filler_neutrals = client.generate_reviews("generic_filler", 50, "neutral")
+
     # Statistiche globali
     item_counts = df.group_by("parent_asin").len().sort("len", descending=True)
     top_items = item_counts.head(200)["parent_asin"].to_list()
@@ -190,17 +195,15 @@ def generate_genai_attack(df: pl.DataFrame, target_item: str, num_bots: int = 50
         if num_all > 0:
             fillers.extend(np.random.choice(available_all, size=num_all, replace=False))
             
-        # Generiamo o recuperiamo i testi per ciascun filler item di questo bot
+        # Assegniamo testi dal pool di recensioni generiche per ciascun filler item di questo bot
         for f_item in fillers:
             # Assegniamo un sentiment casuale (neutral o positive per i filler)
             f_sentiment = np.random.choice(["neutral", "positive"])
             f_rating = 5.0 if f_sentiment == "positive" else 4.0 if f_sentiment == "neutral" else 3.0
             
-            # Richiediamo 5 recensioni dal client (saranno pre-cached in blocchi da 5 per ridurre le API call)
-            # e prendiamo la prima (o una a caso da quel blocco)
-            f_reviews = client.generate_reviews(f_item, 5, f_sentiment)
-            # Scegliamo un testo a caso tra quelli generati per questo prodotto
-            f_rev = np.random.choice(f_reviews) if f_reviews else {"title": "Good", "text": "It works as expected for this product."}
+            # Peschiamo una recensione casuale dal pool corretto
+            pool = filler_positives if f_sentiment == "positive" else filler_neutrals
+            f_rev = np.random.choice(pool) if pool else {"title": "Good", "text": "It works as expected for this product."}
             
             bot_records.append({
                 "rating": float(f_rating),
