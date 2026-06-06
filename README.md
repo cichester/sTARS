@@ -7,9 +7,11 @@ Un approccio ibrido per la rilevazione e mitigazione delle *Fake Review* in ambi
 I Sistemi di Raccomandazione (RS) tradizionali assumono che le interazioni utente-item siano espressione genuina delle preferenze. Tuttavia, l'ecosistema dell'e-commerce è spesso inquinato da recensioni generate artificialmente per manipolare il ranking dei prodotti. 
 
 **sTARS** supera i limiti dei classici filtri introducendo un layer di *Anomaly Detection* per penalizzare i contenuti spinti da comportamenti non genuini. L'architettura del sistema si basa su tre moduli principali (paradigma a Late Fusion):
-1. **Estrazione Semantica (Content-Based Engine):** Utilizza modelli basati su Transformer (come Sentence-BERT) per mappare il testo delle recensioni in *dense vector embeddings*, valutando la rilevanza semantica pura tra utente e prodotto.
+1. **Estrazione Semantica (Content-Based Engine):** Utilizza modelli basati su Transformer per mappare il testo delle recensioni in *dense vector embeddings*, valutando la rilevanza semantica pura tra utente e prodotto. Supporta sia Sentence-BERT standard (all-MiniLM-L6-v2) sia un modello **RoBERTa-base** fine-tunato ad-hoc su triple contrastive tramite **LoRA** (Low-Rank Adaptation) per catturare meglio le sfumature semantiche delle recensioni.
 2. **Behavioral Anomaly Detection (Trust Scorer):** Analizza le feature comportamentali (es. *burstiness* delle recensioni, deviazione dal rating medio) e utilizza *Isolation Forest* in modo non supervisionato per generare un *Anomaly Score* e isolare profili assimilabili a spammer o botnet.
 3. **Late Fusion Ranking:** Combina il punteggio di similarità (Modulo A) con una penalità proporzionale all'Anomaly Score (Modulo B), filtrando attivamente i prodotti spinti da campagne di manipolazione. La flessione delle metriche classiche di IR (come nDCG) nella valutazione finale è una *feature* ricercata, in quanto indica che il sistema sta attivamente "nascondendo" prodotti manipolati ma storicamente molto votati.
+
+Inoltre, il sistema integra un modulo di **Adversarial Evaluation** per verificare la robustezza del sistema a fronte di campagne di *data poisoning* sintetico (attacchi con bot comportamentali e semantici).
 
 ## Dataset
 
@@ -39,12 +41,16 @@ Il progetto è gestito da uno script di orchestrazione end-to-end (`main.py`). I
 3. **Esecuzione di step specifici:**
    È possibile eseguire i singoli step della pipeline passando l'argomento `--step`:
    ```bash
-   python main.py --step ingest      # 1. Lettura JSONL, filtro 5-core e salvataggio Parquet
-   python main.py --step preprocess  # 2. Pulizia del testo (HTML, URL)
-   python main.py --step features    # 3. Estrazione feature comportamentali
-   python main.py --step embed       # 4. Generazione profili ed Embedding Sentence-BERT
-   python main.py --step anomaly     # 5. Addestramento Isolation Forest e calcolo Trust Score
-   python main.py --step evaluate    # 6. Late Fusion, ranking Train/Test e calcolo metriche
+   python main.py --step ingest           # 1. Lettura JSONL, filtro 5-core e salvataggio Parquet
+   python main.py --step preprocess       # 2. Pulizia del testo (HTML, URL)
+   python main.py --step features         # 3. Estrazione feature comportamentali
+   python main.py --step embed            # 4. Generazione profili ed Embedding Sentence-BERT
+   python main.py --step anomaly          # 5. Addestramento Isolation Forest e calcolo Trust Score
+   python main.py --step evaluate         # 6. Late Fusion, ranking Train/Test e calcolo metriche (SBERT)
+   python main.py --step finetune         # 7. Mining delle triple e Fine-Tuning LoRA di RoBERTa
+   python main.py --step embed-roberta    # 8. Generazione profili ed Embedding con RoBERTa fine-tuned
+   python main.py --step evaluate-roberta # 9. Late Fusion, ranking e metriche con embedding RoBERTa
+   python main.py --step adversarial      # 10. Adversarial Evaluation (Data Poisoning)
    ```
 
 4. **Aiuto CLI:**
