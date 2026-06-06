@@ -139,18 +139,18 @@
 
 ---
 
-## Sprint 7 — RoBERTa + LoRA Fine-Tuning (Upgrade) 🚀 ⏳ NON SVOLTO
+## Sprint 7 — RoBERTa + LoRA Fine-Tuning (Upgrade) 🚀 🟢 IN CORSO
 **Durata stimata:** 2-3 sessioni  
 **Obiettivo:** Sostituire Sentence-BERT baseline con RoBERTa-base fine-tuned via LoRA.
-**Stato:** ⏳ *Opzionale — da attivare dopo Sprint 6 completato*
+**Stato:** 🟢 *In corso — Codice implementato, in attesa di run GPU overnight*
 
 | # | Task | Output | Stato |
 |---|------|--------|-------|
-| 7.1 | Preparare dataset per fine-tuning (triple: anchor, positive, negative) | Dataset NLI-style | ❌ Da fare |
-| 7.2 | Configurare PEFT/LoRA su RoBERTa-base | Modello con adapter | ❌ Da fare |
-| 7.3 | Fine-tuning con 4-bit quantization (bitsandbytes) | Modello salvato | ❌ Da fare |
-| 7.4 | Ri-generare embedding con nuovo modello | Nuovi file .npy | ❌ Da fare |
-| 7.5 | Ri-eseguire evaluation comparativa | Report aggiornato | ❌ Da fare |
+| 7.1 | Preparare dataset per fine-tuning (triple: anchor, positive, negative) | Dataset NLI-style | ✅ Done (`triplet_mining.py`) |
+| 7.2 | Configurare PEFT/LoRA su RoBERTa-base | Modello con adapter | ✅ Done (`roberta_finetuner.py`) |
+| 7.3 | Fine-tuning con 4-bit quantization (bitsandbytes) | Modello salvato | ⏳ Attesa esecuzione |
+| 7.4 | Ri-generare embedding con nuovo modello | Nuovi file .npy | ⏳ Attesa esecuzione |
+| 7.5 | Ri-eseguire evaluation comparativa | Report aggiornato | ⏳ Attesa esecuzione |
 
 > [!NOTE]
 > Questo sprint richiede la creazione di un dataset di triple (anchor, positive, negative) a partire dalle interazioni user-item per addestrare il modello in modalità contrastiva. Va valutato se il guadagno in nDCG giustifica il costo computazionale (stima ~2-4 ore di fine-tuning su RTX 5070).
@@ -159,19 +159,19 @@
 
 ---
 
-## Sprint 8 — Adversarial Evaluation (Fase 4 Futura) ⚔️ ⏳ NON SVOLTO
+## Sprint 8 — Adversarial Evaluation (Fase 4 Futura) ⚔️ 🟢 IN CORSO
 **Durata stimata:** 2-3 sessioni  
 **Obiettivo:** Validare robustezza del sistema sotto attacco Data Poisoning.
-**Stato:** ⏳ *Bassa priorità — come da documento di progetto, Fase 4*
+**Stato:** 🟢 *In corso — Codice implementato, in attesa di esecuzione post Sprint 7*
 
 | # | Task | Output | Stato |
 |---|------|--------|-------|
-| 8.1 | Implementare generatore di bot sintetici (Average Attack) | Funzione `generate_attack()` | ❌ Da fare |
-| 8.2 | Implementare Bandwagon Attack | Variante d'attacco | ❌ Da fare |
-| 8.3 | Iniettare bot nel dataset | Dataset avvelenato | ❌ Da fare |
-| 8.4 | Ri-esecuzione pipeline completa su dataset avvelenato | Ranking post-attacco | ❌ Da fare |
-| 8.5 | Misurazione Rank Shift del Target item | Report resilienza | ❌ Da fare |
-| 8.6 | Confronto Baseline vs Trust-Aware sotto attacco | Report finale | ❌ Da fare |
+| 8.1 | Implementare generatore di bot sintetici (Average Attack) | Funzione `generate_attack()` | ✅ Done (`attack_generator.py`) |
+| 8.2 | Implementare Bandwagon Attack | Variante d'attacco | ✅ Done (`attack_generator.py`) |
+| 8.3 | Iniettare bot nel dataset | Dataset avvelenato | ✅ Done (`adversarial_eval.py`) |
+| 8.4 | Ri-esecuzione pipeline completa su dataset avvelenato | Ranking post-attacco | ⏳ Attesa esecuzione |
+| 8.5 | Misurazione Rank Shift del Target item | Report resilienza | ⏳ Attesa esecuzione |
+| 8.6 | Confronto Baseline vs Trust-Aware sotto attacco | Report finale | ⏳ Attesa esecuzione |
 
 **Quality Gate:** Il sistema Trust-Aware assorbe l'attacco e il Target item precipita fuori dal Top-K, mentre nel Baseline sale.
 
@@ -271,8 +271,8 @@ gantt
 | 4 — Anomaly Det. | ✅ Completato | Isolation Forest + trust_score |
 | 5 — Fusion | ✅ Completato | Late Fusion (Similarity × Trust) |
 | 6 — Evaluation | ✅ Completato | nDCG, Precision@K, Rank Shift |
-| **7 — RoBERTa+LoRA** | **⏳ Non svolto** | **Opzionale: fine-tuning contrastivo** |
-| **8 — Adversarial** | **⏳ Non svolto** | **Bassa priorità: Data Poisoning test** |
+| **7 — RoBERTa+LoRA** | **🟢 In corso** | **Codice pronto, in attesa di run** |
+| **8 — Adversarial** | **🟢 In corso** | **Codice pronto, in attesa di run** |
 
 > [!TIP]
 > Gli Sprint 2 e 3 possono procedere in **parallelo** dopo il completamento dello Sprint 1, accelerando il timeline complessivo.

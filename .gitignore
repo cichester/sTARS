@@ -1,8 +1,12 @@
 venv/
-data/
+data/*
+!data/roberta_lora_adapter/
 dataset/
 __pycache__/
 .pytest_cache/
 *.log
 *.parquet
 *.jsonl
+RELAZIONE.md
+schedule_run.py
+.vscode/

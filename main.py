@@ -240,14 +240,96 @@ def step_evaluate():
     print("═" * 60 + "\n")
 
 
+# ── Step 7a: LoRA Fine-Tuning ─────────────────────────────────────────
+def step_finetune():
+    """Mina le triple contrastive e fine-tuna RoBERTa-base con LoRA."""
+    from src.triplet_mining import mine_triplets
+    from src.roberta_finetuner import train_roberta_lora
+    logger.info("═══ STEP 7a: LORA FINE-TUNING ═══")
+    mine_triplets()
+    train_roberta_lora()
+
+# ── Step 7b: Re-Embedding RoBERTa ───────────────────────────────────
+def step_embed_roberta():
+    """Ri-genera tutti gli embedding usando RoBERTa fine-tuned."""
+    from src.embedding_engine import run_roberta_embedding_pipeline
+    logger.info("═══ STEP 7b: RE-EMBEDDING ROBERTA ═══")
+    run_roberta_embedding_pipeline()
+
+# ── Step 7c: Evaluation RoBERTa ─────────────────────────────────────
+def step_evaluate_roberta():
+    """Late Fusion + Evaluation utilizzando i profili RoBERTa."""
+    from src.fusion import calculate_item_trust_factors, generate_ranking
+    from src.evaluation import evaluate_recommender, calculate_rank_shift
+    from config import EMBEDDINGS_ROBERTA_DIR
+    logger.info("═══ STEP 7c: EVALUATION ROBERTA ═══")
+    
+    # ── Caricamento ──
+    df = pl.read_parquet(DATA_DIR / "electronics_5core_clean.parquet")
+    features = pl.read_parquet(FEATURES_PATH)
+    
+    if not os.path.exists(EMBEDDINGS_ROBERTA_DIR / "user_profiles.npy"):
+        logger.error("Profili RoBERTa non trovati. Eseguire step embed-roberta prima.")
+        return
+        
+    user_profiles = np.load(EMBEDDINGS_ROBERTA_DIR / "user_profiles.npy", allow_pickle=True).item()
+    item_profiles = np.load(EMBEDDINGS_ROBERTA_DIR / "item_profiles.npy", allow_pickle=True).item()
+
+    # Convertiamo timestamp se necessario
+    if df.schema["timestamp"] in [pl.Int64, pl.Float64, pl.Int32]:
+        df = df.with_columns(pl.from_epoch(pl.col("timestamp"), time_unit="ms").alias("datetime"))
+    else:
+        df = df.with_columns(pl.col("timestamp").alias("datetime"))
+
+    cutoff = df["datetime"].quantile(1.0 - TEST_SIZE_RATIO)
+    train_df = df.filter(pl.col("datetime") <= cutoff)
+    test_df  = df.filter(pl.col("datetime") > cutoff)
+
+    test_ground_truth = {}
+    for row in test_df.select(["user_id", "parent_asin"]).iter_rows():
+        uid, pid = row
+        test_ground_truth.setdefault(uid, set()).add(pid)
+
+    train_users = set(train_df["user_id"].unique().to_list())
+    eval_users  = {u for u in test_ground_truth if u in train_users and u in user_profiles}
+    test_ground_truth = {u: v for u, v in test_ground_truth.items() if u in eval_users}
+    logger.info(f"Utenti valutabili (presenti in train + test + profiles): {len(eval_users):,}")
+
+    item_trust_factors = calculate_item_trust_factors(train_df, features)
+    eval_user_profiles = {u: user_profiles[u] for u in eval_users}
+
+    max_k = max(TOP_K_VALUES)
+    baseline_ranking = generate_ranking(eval_user_profiles, item_profiles, item_trust_factors, top_k=max_k, use_trust=False)
+    trust_ranking    = generate_ranking(eval_user_profiles, item_profiles, item_trust_factors, top_k=max_k, use_trust=True)
+
+    baseline_metrics = evaluate_recommender(baseline_ranking, test_ground_truth, k_list=TOP_K_VALUES)
+    trust_metrics    = evaluate_recommender(trust_ranking,    test_ground_truth, k_list=TOP_K_VALUES)
+
+    rank_shifts = calculate_rank_shift(baseline_ranking, trust_ranking)
+    avg_shift   = np.mean(list(rank_shifts.values())) if rank_shifts else 0.0
+
+    logger.info(f"Report Evaluation RoBERTa: nDCG@5 Baseline={baseline_metrics['nDCG@5']:.4f}, Trust={trust_metrics['nDCG@5']:.4f}")
+    logger.info(f"Rank Shift medio: {avg_shift:+.2f}")
+
+# ── Step 8: Adversarial Evaluation ──────────────────────────────────
+def step_adversarial():
+    """Inietta bot sintetici e misura la resilienza del sistema."""
+    from src.adversarial_eval import run_adversarial_evaluation
+    logger.info("═══ STEP 8: ADVERSARIAL EVALUATION ═══")
+    run_adversarial_evaluation()
+
 # ── CLI ──────────────────────────────────────────────────────────────
 STEPS = {
-    "ingest":     step_ingest,
-    "preprocess":  step_preprocess,
-    "features":   step_features,
-    "embed":      step_embed,
-    "anomaly":    step_anomaly,
-    "evaluate":   step_evaluate,
+    "ingest":         step_ingest,
+    "preprocess":     step_preprocess,
+    "features":       step_features,
+    "embed":          step_embed,
+    "anomaly":        step_anomaly,
+    "evaluate":       step_evaluate,
+    "finetune":       step_finetune,
+    "embed-roberta":  step_embed_roberta,
+    "evaluate-roberta": step_evaluate_roberta,
+    "adversarial":    step_adversarial,
 }
 
 def main():
@@ -258,13 +340,17 @@ def main():
     parser.add_argument(
         "--step", choices=list(STEPS.keys()),
         help="Esegui un singolo step:\n"
-             "  ingest     → Ingestion & 5-core filtering\n"
-             "  preprocess → Pulizia testo (HTML/URL)\n"
-             "  features   → Feature Engineering comportamentale\n"
-             "  embed      → Embedding Sentence-BERT (GPU)\n"
-             "  anomaly    → Isolation Forest → Trust Score\n"
-             "  evaluate   → Late Fusion + Metriche IR\n"
-             "Se omesso, esegue tutti gli step in sequenza."
+             "  ingest           → Ingestion & 5-core filtering\n"
+             "  preprocess       → Pulizia testo (HTML/URL)\n"
+             "  features         → Feature Engineering comportamentale\n"
+             "  embed            → Embedding Sentence-BERT (GPU)\n"
+             "  anomaly          → Isolation Forest → Trust Score\n"
+             "  evaluate         → Late Fusion + Metriche IR (SBERT)\n"
+             "  finetune         → LoRA Fine-Tuning RoBERTa\n"
+             "  embed-roberta    → Re-embedding con RoBERTa\n"
+             "  evaluate-roberta → Late Fusion + Metriche IR (RoBERTa)\n"
+             "  adversarial      → Adversarial Evaluation (Data Poisoning)\n"
+             "Se omesso, esegue tutti gli step originali in sequenza."
     )
     args = parser.parse_args()
 
