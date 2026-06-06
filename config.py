@@ -54,3 +54,10 @@ RANDOM_SEED = 42
 # Training/Evaluation
 TEST_SIZE_RATIO = 0.2
 TOP_K_VALUES = [5, 10, 20]
+
+# Google Gemini API configuration
+GEMINI_MODEL_NAME = "gemini-2.5-flash"
+GEMINI_CACHE_PATH = DATA_DIR / "genai_reviews_cache.json"
+GENAI_BATCH_SIZE = 5
+GENAI_RPM_LIMIT = 14
+

@@ -9,7 +9,7 @@ from config import (
     TEST_SIZE_RATIO, TOP_K_VALUES, EMBEDDINGS_ROBERTA_DIR, ROBERTA_ADAPTER_DIR
 )
 from src.attack_generator import (
-    select_target_item, generate_average_attack, generate_bandwagon_attack, inject_bots
+    select_target_item, generate_average_attack, generate_bandwagon_attack, generate_genai_attack, inject_bots
 )
 from src.feature_engineering import extract_behavioral_features
 from src.anomaly_detector import extract_trust_scores
@@ -32,6 +32,8 @@ def run_attack_evaluation(clean_df: pl.DataFrame, features_df: pl.DataFrame,
         bot_df = generate_average_attack(clean_df, target_item, num_bots=num_bots)
     elif attack_type == "bandwagon":
         bot_df = generate_bandwagon_attack(clean_df, target_item, num_bots=num_bots)
+    elif attack_type == "genai":
+        bot_df = generate_genai_attack(clean_df, target_item, num_bots=num_bots)
     else:
         raise ValueError(f"Tipo di attacco non supportato: {attack_type}")
         
@@ -145,12 +147,14 @@ def run_adversarial_for_model(clean_df: pl.DataFrame, features_df: pl.DataFrame,
     bot_counts = [50, 100, 200]
     results_avg = {}
     results_bw = {}
+    results_genai = {}
     
     for count in bot_counts:
         results_avg[count] = run_attack_evaluation(clean_df, features_df, user_profiles, item_profiles, "average", count)
         results_bw[count] = run_attack_evaluation(clean_df, features_df, user_profiles, item_profiles, "bandwagon", count)
+        results_genai[count] = run_attack_evaluation(clean_df, features_df, user_profiles, item_profiles, "genai", count)
         
-    return {"average": results_avg, "bandwagon": results_bw}
+    return {"average": results_avg, "bandwagon": results_bw, "genai": results_genai}
 
 def run_adversarial_evaluation():
     logger.info("=== Avvio Adversarial Evaluation ===")
@@ -198,6 +202,14 @@ def run_adversarial_evaluation():
             f.write("|:---:|:---|:---:|:---:|:---:|:---:|:---:|\n")
             for count in [50, 100, 200]:
                 res = model_res["bandwagon"][count]
+                f.write(f"| {count} | `{res['target_item']}` | {res['detection_rate']:.2%} | {res['pos_base']:.2f} | {res['pos_trust']:.2f} | {res['hit_base']:.2%} | {res['hit_trust']:.2%} |\n")
+            f.write("\n")
+            
+            f.write("### 3. GenAI Attack\n\n")
+            f.write("| Num Bot | Target Item | Bot Detection Rate | Posizione Baseline | Posizione Trust-Aware | Hit Rate@20 Baseline | Hit Rate@20 Trust-Aware |\n")
+            f.write("|:---:|:---|:---:|:---:|:---:|:---:|:---:|\n")
+            for count in [50, 100, 200]:
+                res = model_res["genai"][count]
                 f.write(f"| {count} | `{res['target_item']}` | {res['detection_rate']:.2%} | {res['pos_base']:.2f} | {res['pos_trust']:.2f} | {res['hit_base']:.2%} | {res['hit_trust']:.2%} |\n")
             f.write("\n---\n\n")
             

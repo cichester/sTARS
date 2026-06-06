@@ -38,6 +38,11 @@ def test_extract_behavioral_features():
     assert u1["avg_helpful"] == 1.0 # (2+1+0)/3
     assert u1["activity_span_days"] == 0
     assert u1["unique_items_ratio"] == 1.0
+    assert "avg_ttr" in u1
+    assert "avg_word_len" in u1
+    assert "avg_punct_ratio" in u1
+    assert u1["avg_ttr"] == 1.0
+    assert u1["avg_punct_ratio"] > 0.0
     
     # Check U2
     u2 = features.filter(pl.col("user_id") == "U2").to_dicts()[0]
@@ -49,3 +54,6 @@ def test_extract_behavioral_features():
     assert u2["pct_extreme"] == 1.0 # Tutti e due sono in (1.0, 5.0)
     assert u2["pct_verified"] == 1.0
     assert u2["avg_helpful"] == 5.0
+    assert u2["avg_ttr"] == 1.0  # "terrible product" (2 unique / 2 total) and "perfect!" (1 unique / 1 total)
+    assert u2["avg_punct_ratio"] > 0.0
+

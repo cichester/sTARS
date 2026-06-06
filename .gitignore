@@ -10,3 +10,4 @@ __pycache__/
 RELAZIONE.md
 schedule_run.py
 .vscode/
+.env

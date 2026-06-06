@@ -32,13 +32,22 @@ Il progetto è gestito da uno script di orchestrazione end-to-end (`main.py`). I
    ```
    *(Oppure tramite il path diretto: `venv\Scripts\python.exe main.py`)*
 
-2. **Esecuzione completa della Pipeline:**
+2. **Configurazione Google Gemini API (Opzionale, per Adversarial Attack):**
+   Per abilitare la generazione di testi realistici e diversificati tramite intelligenza artificiale per l'attacco avversario:
+   - Crea un file `.env` nella directory principale del progetto.
+   - Inserisci la tua chiave API di Google AI Studio (Gemini):
+     ```env
+     GEMINI_API_KEY=la_tua_api_key_qui
+     ```
+   *(Nota: se il file `.env` o la chiave non sono presenti, il sistema userà automaticamente dei testi di fallback pronti all'uso senza interrompere l'esecuzione).*
+
+3. **Esecuzione completa della Pipeline:**
    Per lanciare l'intera pipeline in sequenza (Ingestion, Preprocessing, Feature Engineering, Embedding, Anomaly Detection e Evaluation):
    ```bash
    python main.py
    ```
 
-3. **Esecuzione di step specifici:**
+4. **Esecuzione di step specifici:**
    È possibile eseguire i singoli step della pipeline passando l'argomento `--step`:
    ```bash
    python main.py --step ingest           # 1. Lettura JSONL, filtro 5-core e salvataggio Parquet
@@ -53,7 +62,7 @@ Il progetto è gestito da uno script di orchestrazione end-to-end (`main.py`). I
    python main.py --step adversarial      # 10. Adversarial Evaluation (Data Poisoning)
    ```
 
-4. **Aiuto CLI:**
+5. **Aiuto CLI:**
    ```bash
    python main.py --help
    ```

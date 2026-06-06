@@ -1,6 +1,7 @@
 import polars as pl
 import numpy as np
 import logging
+from src.genai_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,95 @@ def generate_bandwagon_attack(df: pl.DataFrame, target_item: str, num_bots: int 
                 "rating": f_rating,
                 "title": "Great",
                 "text": "Very popular and for a good reason. Works great.",
+                "images": [],
+                "asin": f_item,
+                "parent_asin": f_item,
+                "user_id": bot_id,
+                "timestamp": int(np.random.uniform(1.6e12, 1.7e12)),
+                "helpful_vote": 0,
+                "verified_purchase": False
+            })
+            
+    bot_df = pl.DataFrame(bot_records)
+    
+    if "text" in bot_df.columns:
+        bot_df = bot_df.with_columns(pl.col("text").alias("review_text"))
+        
+    return bot_df
+
+
+def generate_genai_attack(df: pl.DataFrame, target_item: str, num_bots: int = 50, filler_size: int = 20, seed: int = 42) -> pl.DataFrame:
+    """
+    Genera bot con profilo GenAI Attack.
+    I testi del target e dei filler vengono generati tramite l'API di Google Gemini (o recuperati da cache).
+    Il comportamento simula un attacco ibrido:
+    - Target: recensito con rating 5.0 e testo positivo generato da GenAI.
+    - Filler: mix del 50% di item popolari e 50% di item casuali, con rating realistici e testi generati da GenAI.
+    """
+    logger.info(f"Generazione GenAI Attack per il target {target_item} con {num_bots} bot...")
+    np.random.seed(seed + 2)
+    
+    client = GeminiClient()
+    
+    # 1. Generazione di num_bots recensioni per il target (tutte positive)
+    logger.info(f"Generazione dei testi GenAI per l'item target {target_item}...")
+    target_reviews = client.generate_reviews(target_item, num_bots, "positive")
+    
+    # Statistiche globali
+    item_counts = df.group_by("parent_asin").len().sort("len", descending=True)
+    top_items = item_counts.head(200)["parent_asin"].to_list()
+    all_items = df["parent_asin"].unique().to_list()
+    
+    bot_records = []
+    
+    for i in range(num_bots):
+        bot_id = f"BOT_GENAI_{i:04d}"
+        
+        # Target review (usiamo a rotazione quelle generate)
+        t_rev = target_reviews[i % len(target_reviews)]
+        bot_records.append({
+            "rating": 5.0, # Push attack
+            "title": t_rev["title"],
+            "text": t_rev["text"],
+            "images": [],
+            "asin": target_item,
+            "parent_asin": target_item,
+            "user_id": bot_id,
+            "timestamp": int(np.random.uniform(1.6e12, 1.7e12)),
+            "helpful_vote": 0,
+            "verified_purchase": False
+        })
+        
+        # Selezione dei filler items (ibrido 50% popolari, 50% random)
+        fillers = []
+        
+        # Escludiamo il target dai possibili filler
+        available_top = [item for item in top_items if item != target_item]
+        num_top = min(filler_size // 2, len(available_top))
+        if num_top > 0:
+            fillers.extend(np.random.choice(available_top, size=num_top, replace=False))
+            
+        available_all = [item for item in all_items if item != target_item and item not in fillers]
+        num_all = min(filler_size - len(fillers), len(available_all))
+        if num_all > 0:
+            fillers.extend(np.random.choice(available_all, size=num_all, replace=False))
+            
+        # Generiamo o recuperiamo i testi per ciascun filler item di questo bot
+        for f_item in fillers:
+            # Assegniamo un sentiment casuale (neutral o positive per i filler)
+            f_sentiment = np.random.choice(["neutral", "positive"])
+            f_rating = 5.0 if f_sentiment == "positive" else 4.0 if f_sentiment == "neutral" else 3.0
+            
+            # Richiediamo 5 recensioni dal client (saranno pre-cached in blocchi da 5 per ridurre le API call)
+            # e prendiamo la prima (o una a caso da quel blocco)
+            f_reviews = client.generate_reviews(f_item, 5, f_sentiment)
+            # Scegliamo un testo a caso tra quelli generati per questo prodotto
+            f_rev = np.random.choice(f_reviews) if f_reviews else {"title": "Good", "text": "It works as expected for this product."}
+            
+            bot_records.append({
+                "rating": float(f_rating),
+                "title": f_rev["title"],
+                "text": f_rev["text"],
                 "images": [],
                 "asin": f_item,
                 "parent_asin": f_item,

@@ -10,3 +10,5 @@ scikit-learn>=1.5
 pytest>=8.0
 tqdm
 beautifulsoup4
+google-genai>=1.0
+python-dotenv>=1.0
