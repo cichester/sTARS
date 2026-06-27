@@ -8,7 +8,12 @@ __pycache__/
 *.parquet
 *.jsonl
 RELAZIONE.md
+Progetto\ sTARS.md
+groundtruth.md
+implementation_plan.md
 schedule_run.py
 .vscode/
 .env
 relazione/
+scaletta_relazione.md
+sprints.md
