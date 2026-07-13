@@ -57,3 +57,28 @@ def test_late_fusion_ranking():
     # Extra check
     # Assicura che i1 resti forte per u1 dato il trust 1.0
     assert trust_ranking["u1"][0] == "i1"
+
+def test_direction_aware_trust_factor():
+    # Test case:
+    # item 1 has one legitimate review (rating 5.0, trust 1.0) and one review bombing review (rating 1.0, trust 0.1)
+    # item 2 has one legitimate review (rating 5.0, trust 1.0) and one shilling review (rating 5.0, trust 0.1)
+    df = pl.DataFrame({
+        "user_id": ["u_legit", "u_bot_bomb", "u_legit2", "u_bot_shill"],
+        "parent_asin": ["i1", "i1", "i2", "i2"],
+        "rating": [5.0, 1.0, 5.0, 5.0]
+    })
+    features_df = pl.DataFrame({
+        "user_id": ["u_legit", "u_bot_bomb", "u_legit2", "u_bot_shill"],
+        "trust_score": [1.0, 0.1, 1.0, 0.1]
+    })
+    
+    item_trust_factors = calculate_item_trust_factors(df, features_df)
+    
+    # Per i1: il bot bombing (rating 1.0 < 3.0, trust 0.1 < 0.3) deve essere ESCLUSO.
+    # Quindi il trust factor di i1 viene calcolato solo su u_legit (trust 1.0).
+    assert item_trust_factors["i1"] == pytest.approx(1.0)
+    
+    # Per i2: il bot shilling (rating 5.0 >= 3.0, trust 0.1 < 0.3) deve essere INCLUSO.
+    # Quindi il trust factor di i2 viene calcolato su u_legit2 (1.0) e u_bot_shill (0.1) -> media = 0.55
+    assert item_trust_factors["i2"] == pytest.approx(0.55)
+

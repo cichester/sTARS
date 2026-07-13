@@ -2,7 +2,7 @@ import polars as pl
 import numpy as np
 import os
 import logging
-from config import PARQUET_5CORE_PATH, FEATURES_PATH, EMBEDDINGS_DIR, TOP_K_VALUES
+from config import PARQUET_5CORE_PATH, FEATURES_PATH, EMBEDDINGS_DIR, TOP_K_VALUES, TRUST_SCORE_THRESHOLD
 from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
@@ -10,23 +10,50 @@ logger = logging.getLogger(__name__)
 def calculate_item_trust_factors(df: pl.DataFrame, features_df: pl.DataFrame) -> dict:
     """
     Calcola il Trust Factor per ogni item.
-    Trust Factor = Media dei trust_score degli utenti che hanno recensito l'item.
+    Applica un filtro "direction-aware" per mitigare sia Shilling che Review Bombing:
+    - Le recensioni con trust_score < TRUST_SCORE_THRESHOLD e rating < 3.0 sono considerate
+      tentativi di review bombing (sabotaggio) e vengono escluse dal calcolo.
+    - Le recensioni con trust_score < TRUST_SCORE_THRESHOLD e rating >= 3.0 sono considerate
+      tentativi di shilling (promozione) e vengono incluse per abbassare la fiducia dell'item.
+    - Tutte le recensioni di utenti genuini (trust_score >= TRUST_SCORE_THRESHOLD) sono incluse.
     """
-    logger.info("Calcolo Item Trust Factors...")
+    logger.info("Calcolo Item Trust Factors (Direction-Aware)...")
     # Join dataset con trust_scores (da features)
     user_trust = features_df.select(["user_id", "trust_score"])
     df_joined = df.join(user_trust, on="user_id", how="left").fill_null(1.0) # Se manca, assumiamo trust 1.0 (Safe)
     
+    # Se manca la colonna rating (es. in alcuni test), assumiamo 5.0 (Safe per non filtrare nulla)
+    if "rating" not in df_joined.columns:
+        df_joined = df_joined.with_columns(pl.lit(5.0).alias("rating"))
+        
+    # Filtro direction-aware
+    # Includiamo se: (utente fidato) OPPURE (recensione positiva/neutra, che potrebbe essere shilling)
+    filtered_df = df_joined.filter(
+        (pl.col("trust_score") >= TRUST_SCORE_THRESHOLD) | (pl.col("rating") >= 3.0)
+    )
+    
     # Aggregazione per item
-    item_trust_df = df_joined.group_by("parent_asin").agg(
+    item_trust_df = filtered_df.group_by("parent_asin").agg(
         pl.col("trust_score").mean().alias("item_trust_factor")
     )
     
-    # Ritorna dict
+    # Costruiamo il dizionario risultante
     items = item_trust_df["parent_asin"].to_numpy()
     trusts = item_trust_df["item_trust_factor"].to_numpy()
+    trust_dict = dict(zip(items, trusts))
     
-    return dict(zip(items, trusts))
+    # Gestione degli item rimasti orfani (solo recensioni bot negative)
+    all_items = df["parent_asin"].unique().to_list()
+    orphan_count = 0
+    for item in all_items:
+        if item not in trust_dict:
+            trust_dict[item] = 1.0  # Nessuna penalizzazione per prodotti colpiti solo da review bombing negativo
+            orphan_count += 1
+            
+    if orphan_count > 0:
+        logger.info(f"Assegnato Trust Factor default (1.0) a {orphan_count} item rimasti senza recensioni valide (sospetto review bombing totale).")
+        
+    return trust_dict
 
 
 def generate_ranking(user_profiles: dict, item_profiles: dict, item_trust_factors: dict, top_k: int = 10, use_trust: bool = True) -> dict:
